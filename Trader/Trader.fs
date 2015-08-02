@@ -89,21 +89,21 @@ let GetRecomendedPrice() = priceManager.PostAndReply(fun replyChannel -> FetchPr
 let GetInitialBalance() = balanceManager.PostAndReply(fun replyChannel -> FetchBalance replyChannel)
 let GetWithdraw() = balanceManager.PostAndReply(fun replyChannel -> FetchWithdraw replyChannel)
 
-let GetRecomendedAmount(balance: BitNZ.balance) = 
+let GetRecomendedAmount(balance : BitNZ.balance) = 
     let amount = Math.Round(balance.nzd_balance / (GetRecomendedPrice() * 2.0), 8)
     match amount < maxAmount with
     | true when amount < 0.5 -> amount * 2.0
     | true -> amount
     | false -> maxAmount
 
-let DeleteOverpricedOrders (myOrders: seq<BitNZ.order>) maxPrice = 
+let DeleteOverpricedOrders (myOrders : seq<BitNZ.order>) maxPrice = 
     myOrders
     |> Seq.filter (fun x -> x.price > maxPrice)
     |> Seq.iter (fun x -> 
            printf "Deleting overpriced order"
            BitNZ.CancelOrder x)
 
-let PrintStats(balance: BitNZ.balance) = 
+let PrintStats(balance : BitNZ.balance) = 
     let initialBalance = GetInitialBalance()
     let avg = (balance.nzd_balance - fst initialBalance) / (balance.btc_balance + GetWithdraw() - snd initialBalance)
     printfn "NZD Balance  : %14.8f" balance.nzd_balance
@@ -115,7 +115,7 @@ let PrintStats(balance: BitNZ.balance) =
     printfn "Max bid price: %14.8f" (GetRecomendedPrice())
     printfn ""
 
-let PrintOrders (myOrders: seq<BitNZ.order>) (buyOrderbook: seq<BitNZ.order>) = 
+let PrintOrders (myOrders : seq<BitNZ.order>) (buyOrderbook : seq<BitNZ.order>) = 
     buyOrderbook
     |> Seq.filter (fun x -> x.price >= (Seq.last myOrders).price)
     |> Seq.iter (fun x -> 
@@ -124,6 +124,42 @@ let PrintOrders (myOrders: seq<BitNZ.order>) (buyOrderbook: seq<BitNZ.order>) =
            | None -> printfn ""
            | _ -> printfn "*")
 
+let BuyBitcoins (myOrders : seq<BitNZ.order>) (sellOrderbook : seq<BitNZ.order>) (balance : BitNZ.balance) maxPrice = 
+    sellOrderbook
+    |> Seq.filter (fun x -> x.price < maxPrice)
+    |> Seq.sortBy (fun x -> x.price)
+    |> Seq.fold (fun (count, nzdAvailable, myOrdersList) sellOrder -> 
+           let rec BuySellOrder count' nzdAvailable' myOrdersList' (sellOrder' : BitNZ.order) = 
+               if (sellOrder'.price * sellOrder'.amount) <= nzdAvailable' then 
+                   printfn "Buying from sell order"
+                   BitNZ.CreateBuyOrder sellOrder'.price sellOrder'.amount
+                   (count' + 1), (nzdAvailable' - (sellOrder'.price * sellOrder'.amount)), myOrdersList'
+               else 
+                   match myOrdersList' with
+                   | head :: tail -> 
+                       printfn "Canceling sell order"
+                       BitNZ.CancelOrder head
+                       let newAvailability = nzdAvailable' + (head.price * head.amount)
+                       BuySellOrder count' newAvailability tail sellOrder'
+                   | [] when nzdAvailable' > 10.0 -> 
+                       let amount = Math.Round(nzdAvailable' / sellOrder'.price, 8) - 1e-8
+                       printfn "Buying from sell order"
+                       BitNZ.CreateBuyOrder sellOrder'.price amount
+                       (count' + 1), (nzdAvailable' - (sellOrder'.price * amount)), myOrdersList'
+                   | _ -> 
+                       count', nzdAvailable', myOrdersList'
+           
+           BuySellOrder count nzdAvailable myOrdersList sellOrder) (0, balance.nzd_available, List.ofSeq myOrders)
+
+let TestBuyBitcoins() =
+    let balance : BitNZ.balance = { nzd_balance = 1020.0; btc_balance = 0.0; btc_available = 0.0; nzd_available = 170.0; nzd_reserved = 0.0; fee = ""; btc_reserved = 0.0 }
+    let buyOrderbook, sellOrderbook = BitNZ.GetOrderbook()
+    let m = seq<BitNZ.order> [ {id = 0; price = 430.0; amount = 1.0}; {id = 1; price = 420.0; amount = 1.0}; ]
+    let count, _, _ = BuyBitcoins m sellOrderbook balance 440.0
+    printfn "%A" count
+    0
+
+
 let Main() = 
     let balance = BitNZ.GetBalance()
     balanceManager.Post(StoreBalance balance)
@@ -131,15 +167,18 @@ let Main() =
     let myOrders = BitNZ.GetBuyOrders()
     DeleteOverpricedOrders myOrders (GetRecomendedPrice())
     let buyOrderbook, sellOrderbook = BitNZ.GetOrderbook()
+    let a = List.ofSeq buyOrderbook
     PrintOrders myOrders buyOrderbook
-
+    let count, _, _ = BuyBitcoins myOrders sellOrderbook balance (GetRecomendedPrice())
+    if count = 0 then
+        ()
 
 //    place_orders(my_orders, buy_orders, sell_orders, balance['nzd_available'], balance['nzd_balance'])
 //    withdraw_btc(balance)
 let rec Loop() = 
     printfn "=[ %s ]===================" (DateTime.Now.ToLongTimeString())
     try 
-        Main()
+        TestBuyBitcoins() |> ignore
     with
     | :? System.Net.WebException as ex -> printfn "%A" ex
     | :? BitNZ.TransactionException as ex -> printfn "%A" ex

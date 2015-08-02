@@ -77,10 +77,15 @@ let GetBuyOrders() =
 
 exception TransactionException of string
 
-let private ExecuteTransaction request tx error = 
+let private ExecuteTransaction' request tx error = 
     let response = ExecuteRequest request
     let json = JObject.Parse(response)
     match Convert.ToBoolean(json.["result"]) with
+    | false -> raise (TransactionException error)
+    | true -> printfn "%s" tx
+
+let private ExecuteTransaction request tx error = 
+    match true with
     | false -> raise (TransactionException error)
     | true -> printfn "%s" tx
 
