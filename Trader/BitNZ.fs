@@ -13,7 +13,7 @@ let private apiKey = LoadAppSetting<string> "BNZ-apiKey"
 let private apiSecret = LoadAppSetting<string> "BNZ-apiSecret"
 let private mbWallet = LoadAppSetting<string> "MB-wallet"
 let private client = new RestClient("https://bitnz.com")
-let private requestOrderbook = new RestRequest("/api/0/orderbook?group=0")
+let private requestOrderbook = new RestRequest("/api/0/orderbook")
 let private urlBalance = "/api/0/private/balance"
 let private urlBtcWithdraw = "/api/0/private/btc/withdraw"
 let private urlOpenBuyOrders = "/api/0/private/orders/buy/open"
@@ -21,18 +21,17 @@ let private urlCancelBuyOrder = "/api/0/private/orders/buy/cancel"
 let private urlCreateBuyOrder = "/api/0/private/orders/buy/create"
 
 type balance = 
-    { nzd_balance: float
-      btc_balance: float
-      nzd_reserved: float
-      btc_reserved: float
-      nzd_available: float
-      btc_available: float
-      fee: string }
+    { nzd_balance: decimal
+      btc_balance: decimal
+      nzd_reserved: decimal
+      btc_reserved: decimal
+      nzd_available: decimal
+      btc_available: decimal }
 
 type order = 
     { id: int
-      price: float
-      amount: float }
+      price: decimal
+      amount: decimal }
 
 let private HashSHA256(message: string) = 
     let encoding = new ASCIIEncoding()
@@ -61,8 +60,8 @@ let GetOrderbook() =
     let mapOrders t = 
         json.[t].Children() |> Seq.map (fun x -> 
                                    { id = 0
-                                     price = Convert.ToDouble(x.[0])
-                                     amount = Convert.ToDouble(x.[1]) })
+                                     price = Convert.ToDecimal(x.[0])
+                                     amount = Convert.ToDecimal(x.[1]) })
     (mapOrders "bids", mapOrders "asks")
 
 let GetBalance() = 
@@ -73,7 +72,7 @@ let GetBalance() =
 let GetBuyOrders() = 
     let request = GetBaseRequest(urlOpenBuyOrders)
     let response = ExecuteRequest request
-    JsonConvert.DeserializeObject<order []>(response) |> Seq.sortByDescending (fun x -> x.price)
+    JsonConvert.DeserializeObject<order []>(response) 
 
 exception TransactionException of string
 
@@ -89,15 +88,28 @@ let private ExecuteTransaction request tx error =
     | false -> raise (TransactionException error)
     | true -> printfn "%s" tx
 
-let CreateBuyOrder price amount = 
-    let request = GetBaseRequest(urlCreateBuyOrder)
-    request.AddParameter("price", price) |> ignore
-    request.AddParameter("amount", amount) |> ignore
-    let tx = sprintf "+ %.8f  %.8f" price amount
-    ExecuteTransaction request tx "Error creating order"
+let CreateBuyOrder (price : decimal) (amount : decimal) msg = 
+//    let request = GetBaseRequest(urlCreateBuyOrder)
+//    request.AddParameter("price", Math.Round(price, 8)) |> ignore
+//    request.AddParameter("amount", Math.Round(amount, 8)) |> ignore
+//    let response = ExecuteRequest request
+//    let json = JObject.Parse(response)
+//    match Convert.ToBoolean(json.["result"]) with
+//    | false -> 
+//        let error = "Error creating order: " //+ json.["result"].["message"].ToString()
+//        raise (TransactionException error)
+//    | true -> 
+        printfn "+ %.8f  %.8f   [%s]" price amount msg
+//         TODO: Parse from json
+        { id = 99; price = price; amount = amount }
 
-let CancelOrder order = 
+
+
+
+    
+
+let CancelOrder order msg = 
     let request = GetBaseRequest(urlCancelBuyOrder)
     request.AddParameter("id", order.id) |> ignore
-    let tx = sprintf "- %.8f  %.8f" order.price order.amount
+    let tx = sprintf "- %.8f  %.8f   [%s]" order.price order.amount msg
     ExecuteTransaction request tx "Error canceling order"

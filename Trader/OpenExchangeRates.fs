@@ -42,4 +42,4 @@ let private getRates =
 
 let GetNzdBrlExchange() = 
     let json = getRates.PostAndReply(fun replyChannel -> Fetch replyChannel)
-    json.["rates"].["BRL"].ToObject<double>() / json.["rates"].["NZD"].ToObject<double>()
+    json.["rates"].["BRL"].ToObject<decimal>() / json.["rates"].["NZD"].ToObject<decimal>()

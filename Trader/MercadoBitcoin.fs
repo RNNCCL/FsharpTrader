@@ -40,10 +40,10 @@ let private getTickerInternal =
         loop (new DateTime(2015, 01, 01)) null)
 
 type ticker = 
-    { buy: double
-      sell: double }
+    { buy: decimal
+      sell: decimal }
 
 let GetTicker() = 
     let json = getTickerInternal.PostAndReply(fun replyChannel -> Fetch replyChannel)
-    { buy = json.["ticker"].["buy"].ToObject<double>()
-      sell = json.["ticker"].["sell"].ToObject<double>() }
+    { buy = json.["ticker"].["buy"].ToObject<decimal>()
+      sell = json.["ticker"].["sell"].ToObject<decimal>() }
