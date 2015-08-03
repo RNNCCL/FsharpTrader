@@ -57,6 +57,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Utils.fs" />
+    <Compile Include="TerminalDispatcher.fs" />
     <Compile Include="BitNZ.fs" />
     <Compile Include="MercadoBitcoin.fs" />
     <Compile Include="OpenExchangeRates.fs" />

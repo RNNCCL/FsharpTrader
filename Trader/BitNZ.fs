@@ -99,7 +99,7 @@ let CreateBuyOrder (price : decimal) (amount : decimal) msg =
 //        let error = "Error creating order: " //+ json.["result"].["message"].ToString()
 //        raise (TransactionException error)
 //    | true -> 
-        printfn "+ %.8f  %.8f   [%s]" price amount msg
+        TerminalDispatcher.PrintCreateOrder price amount msg
 //         TODO: Parse from json
         { id = 99; price = price; amount = amount }
 
@@ -111,5 +111,4 @@ let CreateBuyOrder (price : decimal) (amount : decimal) msg =
 let CancelOrder order msg = 
     let request = GetBaseRequest(urlCancelBuyOrder)
     request.AddParameter("id", order.id) |> ignore
-    let tx = sprintf "- %.8f  %.8f   [%s]" order.price order.amount msg
-    ExecuteTransaction request tx "Error canceling order"
+    TerminalDispatcher.PrintCancelOrder order.price order.amount msg

@@ -24,7 +24,7 @@ let private getTickerInternal =
                     replyChannel.Reply lastResult
                     return! loop lastRequestTime lastResult
                 | false -> 
-                    printfn "\n- Updating Mercado Bitcoin prices"
+                    TerminalDispatcher.PrintInfo "!Updating Mercado Bitcoin prices"
                     let response = client.Execute(tickerRequest)
                     match response.StatusCode with
                     | Net.HttpStatusCode.OK -> 

@@ -94,14 +94,14 @@ let GetWithdraw() = balanceManager.PostAndReply(fun replyChannel -> FetchWithdra
 
 let PrintStats(balance : BitNZ.balance) = 
     let initialBalance = GetInitialBalance()
-    let avg = (balance.nzd_balance - fst initialBalance) / (balance.btc_balance + GetWithdraw() - snd initialBalance)
-    printfn "NZD Balance  : %14.8f" balance.nzd_balance
-    printfn "NZD Available: %14.8f" balance.nzd_available
-    printfn "BTC Balance  : %14.8f" balance.btc_balance
-    printfn "BTC Withdraw : %14.8f" (GetWithdraw())
-    printfn "Avg BTC Price: %14.8f" avg
-    printfn "Exchange rate: %14.8f" (OpenExchangeRates.GetNzdBrlExchange())
-    printfn "Max bid price: %14.8f" (GetRecomendedPrice())
+    //let avg = (balance.nzd_balance - fst initialBalance) / (balance.btc_balance + GetWithdraw() - snd initialBalance)
+    TerminalDispatcher.PrintBalanceData "NZD Balance" balance.nzd_balance
+    TerminalDispatcher.PrintBalanceData "NZD Available" balance.btc_balance
+    TerminalDispatcher.PrintBalanceData "BTC Balance" (GetWithdraw())
+    TerminalDispatcher.PrintBalanceData "BTC Withdraw" 0m
+    TerminalDispatcher.PrintBalanceData "Avg BTC Price" 0m
+    TerminalDispatcher.PrintBalanceData "Exchange rate" (OpenExchangeRates.GetNzdBrlExchange())
+    TerminalDispatcher.PrintBalanceData "Max bid price" (GetRecomendedPrice())
     printfn ""
 
 let PrintOrders (myOrders : seq<BitNZ.order>) (buyOrderbook : seq<BitNZ.order>) = 
@@ -114,11 +114,12 @@ let PrintOrders (myOrders : seq<BitNZ.order>) (buyOrderbook : seq<BitNZ.order>) 
         buyOrderbook
         |> Seq.filter (fun x -> x.price >= order.price)
         |> Seq.iter (fun x -> 
-               printf "  %.8f  %.8f " x.price x.amount
-               match myOrders |> Seq.tryFind (fun y -> y.price = x.price) with
-               | None -> printfn ""
-               | Some order when order.amount = x.amount -> printfn "*"
-               | _ -> printfn "P")
+               let owner =
+                   match myOrders |> Seq.tryFind (fun y -> y.price = x.price) with
+                   | None -> TerminalDispatcher.OrderOwner.ThirdPart
+                   | Some order when order.amount = x.amount -> TerminalDispatcher.OrderOwner.Me
+                   | _ -> TerminalDispatcher.OrderOwner.Group
+               TerminalDispatcher.PrintOrderList x.price x.amount owner)
     | None -> ()
 
 let DeleteOverpricedOrders (myOrders : seq<BitNZ.order>) nzdAvailable maxPrice = 
@@ -195,6 +196,10 @@ let PlaceAndAdjustOrders (buyOrderbook : seq<BitNZ.order>) (myOrders : BitNZ.ord
 
 
 let TestBuyBitcoins() = 
+
+    let balance2 = BitNZ.GetBalance()
+    PrintStats balance2
+
     let balance : BitNZ.balance = 
         { nzd_balance = 20.0m
           btc_balance = 0.0m
@@ -203,15 +208,15 @@ let TestBuyBitcoins() =
           nzd_reserved = 0.0m
           btc_reserved = 0.0m }
     
-    let maxPrice = 433.0m
+    let maxPrice = 435.0m
     
     let myOrders = 
         seq<BitNZ.order> [ 
                            { id = 4
-                             price = 465.09m
-                             amount = 0.19279m }
+                             price = 432.8m
+                             amount = 1.04986796m }
                            { id = 3
-                             price = 440.1m
+                             price = 431.96m
                              amount = 0.1m }
                            { id = 6
                              price = 430.46000001m
@@ -220,19 +225,19 @@ let TestBuyBitcoins() =
                              price = 430.0m
                              amount = 0.65m }
                            { id = 1
-                             price = 433.35m
+                             price = 440.35m
                              amount = 0.3858m }
                            { id = 7
-                             price = 422.0m
-                             amount = 0.2m } ]
+                             price = 427.201m
+                             amount = 0.0251m } ]
     
     //let myOrders = BitNZ.GetBuyOrders()
     let buyOrderbook, sellOrderbook = BitNZ.GetOrderbook()
-    PrintOrders myOrders buyOrderbook
     let available1, myOrders1 = DeleteOverpricedOrders myOrders balance.nzd_available maxPrice
+    PrintOrders myOrders buyOrderbook
     let _, available2, myOrders2 = BuyFromSellingOrders sellOrderbook myOrders1 available1 maxPrice
     PlaceAndAdjustOrders buyOrderbook myOrders2 available2 maxPrice
-    printfn "%A" 12
+//    printfn "%A" 12
     0
 
 let Main() = 
@@ -251,7 +256,7 @@ let Main() =
 //    place_orders(my_orders, buy_orders, sell_orders, balance['nzd_available'], balance['nzd_balance'])
 //    withdraw_btc(balance)
 let rec Loop() = 
-    printfn "=[ %s ]====================" (DateTime.Now.ToLongTimeString())
+    printfn "=[ %s ]====================" (DateTime.Now.ToString("HH:mm:ss"))
     try 
         TestBuyBitcoins() |> ignore
     with

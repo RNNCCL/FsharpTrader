@@ -25,7 +25,7 @@ let private getRates =
                     replyChannel.Reply lastResult
                     return! loop lastRequestTime lastResult
                 | false -> 
-                    printfn "\n- Updating exchange rates"
+                    TerminalDispatcher.PrintInfo "!Updating exchange rates"
                     let response = client.Execute(request)
                     match response.StatusCode with
                     | Net.HttpStatusCode.OK -> 
