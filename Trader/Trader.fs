@@ -8,6 +8,7 @@ let private totalFees = LoadAppSetting<decimal> "totalFees"
 let private maxAmount = LoadAppSetting<decimal> "maxAmount"
 let private gapPriceForReduce = LoadAppSetting<decimal> "gapPriceForReduce"
 let private gapAmountForReplace = LoadAppSetting<decimal> "gapAmountForReplace"
+let private minBtcWithdraw = LoadAppSetting<decimal> "minBtcWithdraw"
 let private frenzyTime = LoadAppSetting<float> "frenzyTime"
 let private sleepTime = LoadAppSetting<int> "sleepTime"
 
@@ -137,23 +138,23 @@ let BuyFromSellingOrders (sellOrderbook : seq<BitNZ.order>) (myOrders : seq<BitN
     sellOrderbook
     |> Seq.filter (fun x -> x.price < maxPrice)
     |> Seq.sortBy (fun x -> x.price)
-    |> Seq.fold (fun (count1, nzdAvailable1, myOrdersList1) sellOrder -> 
-           let rec BuySellOrder count2 nzdAvailable2 myOrdersList2 (sellOrder1 : BitNZ.order) = 
-               if (sellOrder1.price * sellOrder1.amount) <= nzdAvailable2 then 
-                   BitNZ.CreateBuyOrder sellOrder1.price sellOrder1.amount "S0" |> ignore
-                   (count2 + 1), (nzdAvailable2 - (sellOrder1.price * sellOrder1.amount)), myOrdersList2
+    |> Seq.fold (fun (count1, nzdAvailable1, myOrdersList1) sellOrder1 -> 
+           let rec BuySellOrder count2 nzdAvailable2 myOrdersList2 (sellOrder2 : BitNZ.order) = 
+               if (sellOrder2.price * sellOrder2.amount) <= nzdAvailable2 then 
+                   BitNZ.CreateBuyOrder sellOrder2.price sellOrder2.amount "S0" |> ignore
+                   (count2 + 1), (nzdAvailable2 - (sellOrder2.price * sellOrder2.amount)), myOrdersList2
                else 
                    match myOrdersList2 with
                    | head :: tail -> 
                        BitNZ.CancelOrder head "S1"
                        let newAvailability = nzdAvailable2 + (head.price * head.amount)
-                       BuySellOrder count2 newAvailability tail sellOrder1
+                       BuySellOrder count2 newAvailability tail sellOrder2
                    | [] when nzdAvailable2 > 2m -> 
-                       let amount = (nzdAvailable2 / sellOrder1.price) - 1e-8m
-                       BitNZ.CreateBuyOrder sellOrder1.price amount "S2" |> ignore
-                       (count2 + 1), (nzdAvailable2 - (sellOrder1.price * amount)), myOrdersList2
+                       let amount = (nzdAvailable2 / sellOrder2.price) - 1e-8m
+                       BitNZ.CreateBuyOrder sellOrder2.price amount "S2" |> ignore
+                       (count2 + 1), (nzdAvailable2 - (sellOrder2.price * amount)), myOrdersList2
                    | _ -> count2, nzdAvailable2, myOrdersList2
-           BuySellOrder count1 nzdAvailable1 myOrdersList1 sellOrder) (0, nzdAvailable, myOrdersList)
+           BuySellOrder count1 nzdAvailable1 myOrdersList1 sellOrder1) (0, nzdAvailable, myOrdersList)
 
 let GetRecomendedAmount nzdAvailable price = 
     let a1 = (nzdAvailable - 0.1m) / (price * 2m)
@@ -264,7 +265,8 @@ let rec Loop() =
     | :? BitNZ.TransactionException as ex -> printfn "%A" ex
     match IsFrenzyModeSet() with
     | true -> 
-        printfn "\n- Frenzy mode set! -\n"
-        Thread.Sleep(500)
+        printfn "\n      - Frenzy mode set! -\n"
+        Thread.Sleep(10000)
+        //Thread.Sleep(500)
     | false -> Thread.Sleep(sleepTime * 1000)
     Loop()
