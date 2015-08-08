@@ -3,6 +3,7 @@
 open Utils
 open System
 open System.Threading
+open System.Diagnostics
 
 let private totalFees = LoadAppSetting<decimal> "totalFees"
 let private maxAmount = LoadAppSetting<decimal> "maxAmount"
@@ -257,16 +258,23 @@ let Main() =
 //    place_orders(my_orders, buy_orders, sell_orders, balance['nzd_available'], balance['nzd_balance'])
 //    withdraw_btc(balance)
 let rec Loop() = 
-    printfn "=[ %s ]====================" (DateTime.Now.ToString("HH:mm:ss"))
+    printfn "=[ %s ]=====================" (DateTime.Now.ToString("HH:mm:ss"))
+    let sw = new Stopwatch()
+    sw.Start();
     try 
         TestBuyBitcoins() |> ignore
     with
     | :? System.Net.WebException as ex -> printfn "%A" ex
     | :? BitNZ.TransactionException as ex -> printfn "%A" ex
+    
     match IsFrenzyModeSet() with
     | true -> 
         printfn "\n      - Frenzy mode set! -\n"
-        Thread.Sleep(10000)
-        //Thread.Sleep(500)
+        sw.Stop();
+        let totalSecs = Math.Ceiling(sw.Elapsed.TotalSeconds)
+        let diff = 6.0 - totalSecs
+        if diff > 0.0 then
+            Thread.Sleep(10000)
+            //Thread.Sleep(diff * 1000)
     | false -> Thread.Sleep(sleepTime * 1000)
     Loop()
