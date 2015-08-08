@@ -54,8 +54,9 @@ let PrintBalanceData item value =
     printfn " %-13s:%s%s" item (GetColoredValue value (int Color.White)) ResetCode
 
 let PrintInfo info =
-    printfn "%s%s%s" (GetColorSequence (int Color.Cyan) 0) info ResetCode
-
+    let timestamp = DateTime.Now.ToString("HH:mm:ss")
+    printfn "%s[%s] %s%s"(GetColorSequence (int Color.Cyan) 0) timestamp info ResetCode
+    
 let PrintOrderList (price: decimal)  (amount: decimal)  owner =
     let color = 
         match owner with

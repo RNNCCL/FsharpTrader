@@ -7,9 +7,11 @@ open System.Threading
 
 [<EntryPoint>]
 let main argv = 
-    //let (buyOrders, sellOrders) = BitNZ.GetOrderbook()
-    //let myOrders = BitNZ.GetBuyOrders()
-    let balance = TraderBot.Loop()
+    printfn "Warming up..."
+    MercadoBitcoin.Initialize()
+    OpenExchangeRates.Initialize()
+    
+    TraderBot.Loop()
 
 
     printfn "acabou"

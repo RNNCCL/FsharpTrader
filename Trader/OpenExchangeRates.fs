@@ -4,42 +4,65 @@ open RestSharp
 open System
 open Newtonsoft.Json.Linq
 open Utils
+open System.Threading
+open Newtonsoft.Json
 
 let private appId = LoadAppSetting<string> "OXR-appId"
-let private updateInterval = LoadAppSetting<double> "OXR-updateInterval"
+let private updateInterval = LoadAppSetting<int> "OXR-updateInterval"
 let private client = new RestClient("https://openexchangerates.org")
 let private request = new RestRequest("/api/latest.json", Method.GET)
 
 request.AddParameter("app_id", appId) |> ignore
 
-type private msg = 
-    | Fetch of AsyncReplyChannel<JObject>
+type ratesResponse = 
+    { rates : rates }
 
-let private getRates = 
+and rates = 
+    { BRL : decimal
+      NZD : decimal }
+
+type private msg = 
+    | Store of rates
+    | Fetch of AsyncReplyChannel<rates> 
+
+let private ratesManager = 
     MailboxProcessor.Start(fun inbox -> 
-        let rec loop (lastRequestTime: DateTime) lastResult = 
+        let rec loop rates = 
             async { 
-                let! (Fetch replyChannel) = inbox.Receive()
-                match DateTime.Now.Subtract(lastRequestTime).TotalSeconds < updateInterval with
-                | true -> 
-                    replyChannel.Reply lastResult
-                    return! loop lastRequestTime lastResult
-                | false -> 
-                    TerminalDispatcher.PrintInfo "!Updating exchange rates"
-                    let response = client.Execute(request)
-                    match response.StatusCode with
-                    | Net.HttpStatusCode.OK -> 
-                        let newResult = JObject.Parse(response.Content)
-                        replyChannel.Reply newResult
-                        return! loop DateTime.Now newResult
-                    | _ when lastResult = null -> raise response.ErrorException
-                    | _ -> 
-                        printfn "  Error!"
-                        replyChannel.Reply lastResult
-                        return! loop lastRequestTime lastResult
+                let! msg = inbox.Receive()
+                match msg with
+                | Store newRates -> 
+                    return! loop newRates
+                | Fetch replyChannel -> 
+                    replyChannel.Reply rates
+                    return! loop rates
             }
-        loop (new DateTime(2015, 01, 01)) null)
+        loop { BRL = 0m
+               NZD = 0m })
+
+let rec private DownloadAndStoreTicker() = 
+    let response = client.Execute(request)
+    match response.ErrorException with
+    | :? System.Net.WebException -> 
+        Thread.Sleep(30 * 1000)
+        DownloadAndStoreTicker()
+    | null -> 
+        let parse = JsonConvert.DeserializeObject<ratesResponse>(response.Content)
+        TerminalDispatcher.PrintInfo "Updating data from OpenExchangeRates"
+        ratesManager.Post(Store parse.rates)
+    | _ -> raise response.ErrorException
+
+let rec private DownloadService() = 
+    async { 
+        Thread.Sleep(updateInterval * 1000)
+        DownloadAndStoreTicker()
+        return! DownloadService()
+    }
+
+let Initialize() =
+    DownloadAndStoreTicker()
+    Async.Start (DownloadService())
 
 let GetNzdBrlExchange() = 
-    let json = getRates.PostAndReply(fun replyChannel -> Fetch replyChannel)
-    json.["rates"].["BRL"].ToObject<decimal>() / json.["rates"].["NZD"].ToObject<decimal>()
+    let rates = ratesManager.PostAndReply(fun replyChannel -> Fetch replyChannel)
+    rates.BRL / rates.NZD
