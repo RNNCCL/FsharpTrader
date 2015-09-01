@@ -7,6 +7,7 @@ open System.Text
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
 open Utils
+open System.Globalization
 
 let private username = LoadAppSetting<string> "BNZ-username"
 let private apiKey = LoadAppSetting<string> "BNZ-apiKey"
@@ -76,39 +77,31 @@ let GetBuyOrders() =
 
 exception TransactionException of string
 
-let private ExecuteTransaction' request tx error = 
+let CreateBuyOrder (price : decimal) (amount : decimal) msg = 
+    let request = GetBaseRequest(urlCreateBuyOrder)
+    request.AddParameter("price", price.ToString(CultureInfo.InvariantCulture)) |> ignore
+    request.AddParameter("amount", amount.ToString(CultureInfo.InvariantCulture)) |> ignore
     let response = ExecuteRequest request
     let json = JObject.Parse(response)
     match Convert.ToBoolean(json.["result"]) with
-    | false -> raise (TransactionException error)
-    | true -> printfn "%s" tx
-
-let private ExecuteTransaction request tx error = 
-    match true with
-    | false -> raise (TransactionException error)
-    | true -> printfn "%s" tx
-
-let CreateBuyOrder (price : decimal) (amount : decimal) msg = 
-//    let request = GetBaseRequest(urlCreateBuyOrder)
-//    request.AddParameter("price", Math.Round(price, 8)) |> ignore
-//    request.AddParameter("amount", Math.Round(amount, 8)) |> ignore
-//    let response = ExecuteRequest request
-//    let json = JObject.Parse(response)
-//    match Convert.ToBoolean(json.["result"]) with
-//    | false -> 
-//        let error = "Error creating order: " //+ json.["result"].["message"].ToString()
-//        raise (TransactionException error)
-//    | true -> 
+    | false -> 
+        let error = "Error creating order: " + json.["result"].["message"].ToString()
+        raise (TransactionException error)
+    | true -> 
         TerminalDispatcher.PrintCreateOrder price amount msg
 //         TODO: Parse from json
         { id = 99; price = price; amount = amount }
 
 
-
-
-    
-
 let CancelOrder order msg = 
     let request = GetBaseRequest(urlCancelBuyOrder)
     request.AddParameter("id", order.id) |> ignore
-    TerminalDispatcher.PrintCancelOrder order.price order.amount msg
+    let response = ExecuteRequest request
+    let json = JObject.Parse(response)
+    match Convert.ToBoolean(json.["result"]) with
+    | false -> 
+        let error = "Error creating order: " + json.["result"].["message"].ToString()
+        raise (TransactionException error)
+    | true -> 
+        TerminalDispatcher.PrintCancelOrder order.price order.amount msg
+    

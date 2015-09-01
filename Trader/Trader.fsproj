@@ -9,7 +9,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Trader</RootNamespace>
     <AssemblyName>Trader</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Trader</Name>
@@ -61,7 +61,7 @@
     <Compile Include="BitNZ.fs" />
     <Compile Include="MercadoBitcoin.fs" />
     <Compile Include="OpenExchangeRates.fs" />
-    <Compile Include="Trader.fs" />
+    <Compile Include="TraderBot.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />

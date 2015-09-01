@@ -94,7 +94,7 @@ let GetRecomendedPrice() = priceManager.PostAndReply(fun replyChannel -> FetchPr
 let GetInitialBalance() = balanceManager.PostAndReply(fun replyChannel -> FetchBalance replyChannel)
 let GetWithdraw() = balanceManager.PostAndReply(fun replyChannel -> FetchWithdraw replyChannel)
 
-let PrintStats(balance : BitNZ.balance) = 
+let PrintStats(balance : BitNZ.balance) maxPrice = 
     let initialBalance = GetInitialBalance()
     //let avg = (balance.nzd_balance - fst initialBalance) / (balance.btc_balance + GetWithdraw() - snd initialBalance)
     TerminalDispatcher.PrintBalanceData "NZD Balance" balance.nzd_balance
@@ -103,7 +103,7 @@ let PrintStats(balance : BitNZ.balance) =
     TerminalDispatcher.PrintBalanceData "BTC Withdraw" 0m
     TerminalDispatcher.PrintBalanceData "Avg BTC Price" 0m
     TerminalDispatcher.PrintBalanceData "Exchange rate" (OpenExchangeRates.GetNzdBrlExchange())
-    TerminalDispatcher.PrintBalanceData "Max bid price" (GetRecomendedPrice())
+    TerminalDispatcher.PrintBalanceData "Max bid price" maxPrice
     printfn ""
 
 let PrintOrders (myOrders : seq<BitNZ.order>) (buyOrderbook : seq<BitNZ.order>) = 
@@ -197,84 +197,38 @@ let PlaceAndAdjustOrders (buyOrderbook : seq<BitNZ.order>) (myOrders : BitNZ.ord
             ReplaceOrder topOrder (previousOrder.price + 1e-8m) amount nzdAvailable "AO"
 
 
-let TestBuyBitcoins() = 
+let Main () = 
+    let balance = BitNZ.GetBalance()
+    let maxPrice = GetRecomendedPrice()
+    PrintStats balance maxPrice
 
-    let balance2 = BitNZ.GetBalance()
-    PrintStats balance2
-
-    let balance : BitNZ.balance = 
-        { nzd_balance = 20.0m
-          btc_balance = 0.0m
-          btc_available = 0.0m
-          nzd_available = 100.0m
-          nzd_reserved = 0.0m
-          btc_reserved = 0.0m }
-    
-    let maxPrice = 435.0m
-    
-    let myOrders = 
-        seq<BitNZ.order> [ 
-                           { id = 4
-                             price = 432.8m
-                             amount = 1.04986796m }
-                           { id = 3
-                             price = 431.96m
-                             amount = 0.1m }
-                           { id = 6
-                             price = 430.46000001m
-                             amount = 0.21m }
-                           { id = 5
-                             price = 430.0m
-                             amount = 0.65m }
-                           { id = 1
-                             price = 440.35m
-                             amount = 0.3858m }
-                           { id = 7
-                             price = 427.201m
-                             amount = 0.0251m } ]
-    
-    //let myOrders = BitNZ.GetBuyOrders()
-    let buyOrderbook, sellOrderbook = BitNZ.GetOrderbook()
+    let myOrders = BitNZ.GetBuyOrders()
     let available1, myOrders1 = DeleteOverpricedOrders myOrders balance.nzd_available maxPrice
-    PrintOrders myOrders buyOrderbook
+    let buyOrderbook, sellOrderbook = BitNZ.GetOrderbook()
+    PrintOrders myOrders1 buyOrderbook
     let _, available2, myOrders2 = BuyFromSellingOrders sellOrderbook myOrders1 available1 maxPrice
     PlaceAndAdjustOrders buyOrderbook myOrders2 available2 maxPrice
-//    printfn "%A" 12
-    0
+    
+    
 
-let Main() = 
-    let balance = BitNZ.GetBalance()
-    0
-
-//    balanceManager.Post(StoreBalance balance)
-//    PrintStats balance
-//    let myOrders = BitNZ.GetBuyOrders()
-//    //DeleteOverpricedOrders myOrders (GetRecomendedPrice())
-//    let buyOrderbook, sellOrderbook = BitNZ.GetOrderbook()
-//    let a = List.ofSeq buyOrderbook
-//    PrintOrders myOrders buyOrderbook
-//    let count, _, _ = BuyBitcoins myOrders sellOrderbook balance (GetRecomendedPrice())
-//    if count = 0 then ()
-//    place_orders(my_orders, buy_orders, sell_orders, balance['nzd_available'], balance['nzd_balance'])
-//    withdraw_btc(balance)
-let rec Loop() = 
-    printfn "=[ %s ]=====================" (DateTime.Now.ToString("HH:mm:ss"))
+let rec Loop () = 
+    printfn "\n=[ %s ]=====================" (DateTime.Now.ToString("HH:mm:ss"))
     let sw = new Stopwatch()
     sw.Start();
     try 
-        TestBuyBitcoins() |> ignore
+        Main() |> ignore
     with
     | :? System.Net.WebException as ex -> printfn "%A" ex
     | :? BitNZ.TransactionException as ex -> printfn "%A" ex
     
     match IsFrenzyModeSet() with
     | true -> 
-        printfn "\n      - Frenzy mode set! -\n"
+        printfn "\n      - Frenzy mode set! -"
         sw.Stop();
         let totalSecs = Math.Ceiling(sw.Elapsed.TotalSeconds)
         let diff = 6.0 - totalSecs
         if diff > 0.0 then
-            Thread.Sleep(10000)
-            //Thread.Sleep(diff * 1000)
+            Thread.Sleep(int (diff * 1000.0))
     | false -> Thread.Sleep(sleepTime * 1000)
+    
     Loop()
