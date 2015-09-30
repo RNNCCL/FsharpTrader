@@ -17,7 +17,6 @@ type private Intensity =
     | Bright = 2
 
 
-
 let private IsLinux = System.Type.GetType("Mono.Runtime") <> null
 
 let private ResetCode = 
@@ -30,20 +29,24 @@ let private GetColorSequence color level =
 
 let private GetColoredValue (value : decimal) color =
     let c = GetColorSequence color
-    let arr =
-        (sprintf "%14.8f" value).ToCharArray()
-        |> Array.rev
-        |> Array.fold (fun (tail, valueStarted) x -> 
-           let s, v = 
-               if (x >= '1' && x <= '9') || valueStarted then 
-                    sprintf "%s%c" (c Intensity.Normal) x, true
-               elif x = '.' then
-                    sprintf "%s%c" (c Intensity.Bright) x, true
-               else 
-                    sprintf "%s%c" (c Intensity.Bright) x, valueStarted
-           s :: tail, v) ([], false)
 
-    String.Concat(Array.ofList (fst arr))
+    if value > 0m then
+        let arr =
+            (sprintf "%14.8f" value).ToCharArray()
+            |> Array.rev
+            |> Array.fold (fun (tail, valueStarted) x -> 
+               let s, v = 
+                   if (x >= '1' && x <= '9') || valueStarted then 
+                        sprintf "%s%c" (c Intensity.Normal) x, true
+                   elif x = '.' then
+                        sprintf "%s%c" (c Intensity.Bright) x, true
+                   else 
+                        sprintf "%s%c" (c Intensity.Bright) x, valueStarted
+               s :: tail, v) ([], false)
+
+        String.Concat(Array.ofList (fst arr))
+    else
+        sprintf "%s%s" (c Intensity.Bright) (sprintf "%14.8f" value)
 
 let private PrintTransaction color sign price amount tag =
     let p1 = (GetColoredValue price color)
@@ -81,3 +84,6 @@ let PrintCreateOrder (price: decimal)  (amount: decimal) tag =
 let PrintCancelOrder (price: decimal)  (amount: decimal) tag =
     PrintTransaction Color.Red "-" price amount tag
 
+let PrintWithdraw (amount: decimal) = 
+    let timestamp = DateTime.Now.ToString("HH:mm:ss")
+    printfn "%s[%s] WITHDRAW: %f%s"(GetColorSequence Color.Red Intensity.Normal) timestamp amount ResetCode

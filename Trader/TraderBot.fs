@@ -22,6 +22,7 @@ type private msg2 =
     | StoreWithdraw of decimal
     | FetchBalance of AsyncReplyChannel<decimal * decimal>
     | FetchWithdraw of AsyncReplyChannel<decimal>
+    | FetchAvgPrice of AsyncReplyChannel<decimal>
 
 type private msg3 = 
     | FetchPrice of AsyncReplyChannel<decimal>
@@ -91,17 +92,28 @@ let private priceManager =
 let SetFrenzyMode() = frenzyManager.Post SetFrenzyMode
 let IsFrenzyModeSet() = frenzyManager.PostAndReply(fun replyChannel -> IsFrenzyMode replyChannel)
 let GetRecomendedPrice() = priceManager.PostAndReply(fun replyChannel -> FetchPrice replyChannel)
+
+let StoreInitialBalance balance = balanceManager.Post (StoreBalance balance)
 let GetInitialBalance() = balanceManager.PostAndReply(fun replyChannel -> FetchBalance replyChannel)
 let GetWithdraw() = balanceManager.PostAndReply(fun replyChannel -> FetchWithdraw replyChannel)
+let StoreWithdraw btc = balanceManager.Post (StoreWithdraw btc)
+
+let GetAverageBtcPrice (balance : BitNZ.balance) =
+    StoreInitialBalance balance
+    let initialBalance = GetInitialBalance()
+    let spent = balance.btc_balance + GetWithdraw() - snd initialBalance
+    if spent > 0m then
+        (fst initialBalance - balance.nzd_balance) / spent
+    else
+        0m
+
 
 let PrintStats(balance : BitNZ.balance) maxPrice = 
-    let initialBalance = GetInitialBalance()
-    //let avg = (balance.nzd_balance - fst initialBalance) / (balance.btc_balance + GetWithdraw() - snd initialBalance)
     TerminalDispatcher.PrintBalanceData "NZD Balance" balance.nzd_balance
-    TerminalDispatcher.PrintBalanceData "NZD Available" balance.btc_balance
-    TerminalDispatcher.PrintBalanceData "BTC Balance" (GetWithdraw())
-    TerminalDispatcher.PrintBalanceData "BTC Withdraw" 0m
-    TerminalDispatcher.PrintBalanceData "Avg BTC Price" 0m
+    TerminalDispatcher.PrintBalanceData "NZD Available" balance.nzd_available
+    TerminalDispatcher.PrintBalanceData "BTC Balance" balance.btc_balance
+    TerminalDispatcher.PrintBalanceData "BTC Withdraw" (GetWithdraw())
+    TerminalDispatcher.PrintBalanceData "Avg BTC Price" (GetAverageBtcPrice balance)
     TerminalDispatcher.PrintBalanceData "Exchange rate" (OpenExchangeRates.GetNzdBrlExchange())
     TerminalDispatcher.PrintBalanceData "Max bid price" maxPrice
     printfn ""
@@ -173,7 +185,7 @@ let ReplaceOrder oldOrder newPrice newAmount nzdAvailable tag =
         BitNZ.CreateBuyOrder newPrice newAmount tag |> ignore
 
 let PlaceAndAdjustOrders (buyOrderbook : seq<BitNZ.order>) (myOrders : BitNZ.order list) nzdAvailable maxPrice = 
-    let competingOrder = buyOrderbook |> Seq.filter (fun x -> x.price < maxPrice)
+    let competingOrder = buyOrderbook |> Seq.filter (fun x -> x.price < maxPrice && x.amount > 0.1m)
                                       |> Seq.head
     
     let price = competingOrder.price + 1e-8m
@@ -191,11 +203,14 @@ let PlaceAndAdjustOrders (buyOrderbook : seq<BitNZ.order>) (myOrders : BitNZ.ord
     | Some topOrder -> 
         let totalAvailable = nzdAvailable + (topOrder.price * topOrder.amount)
         let amount = GetRecomendedAmount totalAvailable maxPrice
-        let previousOrder = buyOrderbook |> Seq.filter (fun x -> x.price < topOrder.price)            
+        let previousOrder = buyOrderbook |> Seq.filter (fun x -> x.price < topOrder.price && x.amount > 0.1m)            
                                          |> Seq.head
         if topOrder.price - previousOrder.price > gapPriceForReduce || amount - topOrder.amount > gapAmountForReplace then 
             ReplaceOrder topOrder (previousOrder.price + 1e-8m) amount nzdAvailable "AO"
 
+let Withdraw btc =
+    if btc > 0.5m then
+        StoreWithdraw (BitNZ.Withdraw btc)
 
 let Main () = 
     let balance = BitNZ.GetBalance()
@@ -208,7 +223,7 @@ let Main () =
     PrintOrders myOrders1 buyOrderbook
     let _, available2, myOrders2 = BuyFromSellingOrders sellOrderbook myOrders1 available1 maxPrice
     PlaceAndAdjustOrders buyOrderbook myOrders2 available2 maxPrice
-    
+    Withdraw balance.btc_available
     
 
 let rec Loop () = 
@@ -220,6 +235,7 @@ let rec Loop () =
     with
     | :? System.Net.WebException as ex -> printfn "%A" ex
     | :? BitNZ.TransactionException as ex -> printfn "%A" ex
+    | :? BitNZ.RequestException as ex -> printfn "%A" ex
     
     match IsFrenzyModeSet() with
     | true -> 

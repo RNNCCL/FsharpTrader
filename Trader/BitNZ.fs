@@ -48,11 +48,26 @@ let private GetBaseRequest(url: string) =
     let signature = HashSHA256 message
     request.AddParameter("key", apiKey).AddParameter("nonce", nonce).AddParameter("signature", signature)
 
+exception RequestException of string
+
 let private ExecuteRequest request = 
     let response = client.Execute(request)
-    match response.StatusCode with
-    | Net.HttpStatusCode.OK -> response.Content
-    | _ -> raise response.ErrorException
+    try
+        match response.StatusCode with
+        | Net.HttpStatusCode.OK -> response.Content
+        | Net.HttpStatusCode.InternalServerError ->
+            raise (RequestException "Internal Server Error")
+        | _ -> 
+            raise response.ErrorException
+    with
+        | :? System.NullReferenceException -> 
+            printfn "-- DEBUG --" 
+            printfn "Status code:"
+            printfn "%s" (response.StatusCode.ToString())
+            printfn "Content:"
+            printfn "%s" response.Content
+            failwith "Fudeu geral"
+
 
 let GetOrderbook() = 
     let response = ExecuteRequest requestOrderbook
@@ -76,6 +91,23 @@ let GetBuyOrders() =
     JsonConvert.DeserializeObject<order []>(response) 
 
 exception TransactionException of string
+
+let Withdraw (amount : decimal) =
+    let request = GetBaseRequest(urlBtcWithdraw)
+    let finalAmount = amount - 0.0001m
+    request.AddParameter("amount", finalAmount.ToString(CultureInfo.InvariantCulture)) |> ignore
+    request.AddParameter("address", mbWallet) |> ignore
+    let response = ExecuteRequest request
+    let json = JObject.Parse(response)
+    match Convert.ToBoolean(json.["result"]) with
+    | false -> 
+        let error = "Error withdrawing bitcoins: " + json.["result"].["message"].ToString()
+        raise (TransactionException error)
+    | true -> 
+        TerminalDispatcher.PrintWithdraw finalAmount
+        finalAmount
+
+
 
 let CreateBuyOrder (price : decimal) (amount : decimal) msg = 
     let request = GetBaseRequest(urlCreateBuyOrder)
